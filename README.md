@@ -69,5 +69,3 @@ Start the app in another terminal:
 ```bash
 streamlit run app.py
 ```
-
-## Project Structure

@@ -3,7 +3,7 @@ import time
 import shutil
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
@@ -14,46 +14,69 @@ load_dotenv()
 API_KEY = os.getenv("SAM_API_KEY")
 
 def fetch_sam_opportunities():
-    print("  [Scheduler] Fetching fresh data from SAM.gov...")
-    
-    today = datetime.today()
-    one_year_ago = today - timedelta(days=365)
-    
+    print("  [Scheduler] Fetching all data from SAM.gov...")
+
     url = "https://api.sam.gov/opportunities/v2/search"
-    params = {
-        "api_key": API_KEY,
-        "limit": 1000,
-        "postedFrom": one_year_ago.strftime("%m/%d/%Y"),
-        "postedTo": today.strftime("%m/%d/%Y"),
-    }
-    response = requests.get(url, params=params)
-    
-    if response.status_code == 429:
-        print("  [Scheduler] API rate limited — will retry next cycle")
-        return []
-    
-    data = response.json()
+    all_opportunities = []
+    offset = 0
+    limit = 1000
+    total_fetched = 0
 
-    opportunities = []
-    for item in data.get("opportunitiesData", []):
-        title = item.get('title', '')
-        if "multiple award schedule" in title.lower():
-            continue
-        text = f"""
-        Title: {title}
-        Agency: {item.get('fullParentPathName', '')}
-        Type: {item.get('type', '')}
-        Description: {item.get('description', '')}
-        Posted Date: {item.get('postedDate', '')}
-        """
-        opportunities.append(text)
+    while True:
+        params = {
+            "api_key": API_KEY,
+            "limit": limit,
+            "offset": offset,
+            "postedFrom": "01/01/2000",
+            "postedTo": datetime.today().strftime("%m/%d/%Y"),
+        }
 
-    print(f"  [Scheduler] Fetched {len(opportunities)} opportunities")
-    return opportunities
+        response = requests.get(url, params=params)
+
+        if response.status_code == 429:
+            print("  [Scheduler] API rate limited — will retry next cycle")
+            return []
+
+        if response.status_code != 200:
+            print(f"  [Scheduler] API error {response.status_code} — stopping pagination")
+            break
+
+        data = response.json()
+        opportunities_data = data.get("opportunitiesData", [])
+
+        if not opportunities_data:
+            print("  [Scheduler] No more data available")
+            break
+
+        for item in opportunities_data:
+            title = item.get('title', '')
+            if "multiple award schedule" in title.lower():
+                continue
+            text = f"""
+            Title: {title}
+            Agency: {item.get('fullParentPathName', '')}
+            Type: {item.get('type', '')}
+            Description: {item.get('description', '')}
+            Posted Date: {item.get('postedDate', '')}
+            """
+            all_opportunities.append(text)
+
+        total_fetched += len(opportunities_data)
+        print(f"  [Scheduler] Fetched {total_fetched} records so far (offset {offset})...")
+
+        # If we got less than the limit we've hit the end
+        if len(opportunities_data) < limit:
+            print("  [Scheduler] Reached end of available data")
+            break
+
+        offset += limit
+
+    print(f"  [Scheduler] Total fetched: {len(all_opportunities)} opportunities")
+    return all_opportunities
 
 def rebuild_database():
     print("\n[Scheduler] Starting scheduled ingestion...")
-    
+
     if os.path.exists("./data/chroma"):
         shutil.copytree("./data/chroma", "./data/chroma_backup", dirs_exist_ok=True)
         print("  [Scheduler] Backed up old database")
@@ -82,7 +105,7 @@ schedule.every().day.at("00:00").do(rebuild_database)
 print("[Scheduler] Starting up — running initial ingestion...")
 rebuild_database()
 
-print("\n[Scheduler] Running! Database will refresh every minute (change to daily.at('00:00') for production).")
+print("\n[Scheduler] Running! Database will refresh daily at midnight.")
 print("Keep this running in a separate terminal alongside app.py\n")
 
 while True:

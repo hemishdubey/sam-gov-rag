@@ -29,17 +29,48 @@ def search_database(state: AgentState) -> AgentState:
 def fetch_fresh_data(state: AgentState) -> AgentState:
     print("  [Agent] Fetching fresh data from SAM.gov...")
     url = "https://api.sam.gov/opportunities/v2/search"
-    params = {
-        "api_key": os.getenv("SAM_API_KEY"),
-        "limit": 10,
-        "postedFrom": "01/01/2024",
-        "postedTo": "12/31/2024",
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
-    fresh_context = ""
-    for item in data.get("opportunitiesData", []):
-        fresh_context += f"Title: {item.get('title', '')}\nAgency: {item.get('fullParentPathName', '')}\n\n"
+    all_fresh = []
+    offset = 0
+    limit = 1000
+
+    while True:
+        params = {
+            "api_key": os.getenv("SAM_API_KEY"),
+            "limit": limit,
+            "offset": offset,
+            "postedFrom": "01/01/2000",
+            "postedTo": __import__('datetime').datetime.today().strftime("%m/%d/%Y"),
+        }
+        response = requests.get(url, params=params)
+
+        if response.status_code == 429:
+            print("  [Agent] API rate limited — using local data only")
+            break
+
+        if response.status_code != 200:
+            print(f"  [Agent] API error {response.status_code} — stopping")
+            break
+
+        data = response.json()
+        opportunities = data.get("opportunitiesData", [])
+
+        if not opportunities:
+            break
+
+        for item in opportunities:
+            title = item.get('title', '')
+            if "multiple award schedule" in title.lower():
+                continue
+            all_fresh.append(f"Title: {title}\nAgency: {item.get('fullParentPathName', '')}\n")
+
+        print(f"  [Agent] Fetched {len(all_fresh)} fresh records so far...")
+
+        if len(opportunities) < limit:
+            break
+
+        offset += limit
+
+    fresh_context = "\n".join(all_fresh)
     combined = state["context"] + "\n" + fresh_context
     return {**state, "context": combined}
 
