@@ -3,7 +3,7 @@ import time
 import shutil
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
