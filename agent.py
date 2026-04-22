@@ -7,6 +7,7 @@ from typing import TypedDict, List
 import requests
 import os
 from datetime import datetime, timedelta
+from scrubber import scrub_text
 
 load_dotenv()
 
@@ -95,9 +96,15 @@ def generate_answer(state: AgentState) -> AgentState:
 
 def decide_needs_fresh_data(state: AgentState) -> AgentState:
     print("  [Agent] Deciding whether to fetch fresh data...")
+
+    # Scrub the question before processing
+    scrubbed_question, detected = scrub_text(state["question"])
+    if detected:
+        print(f"  [Agent] PII detected and scrubbed: {detected}")
+
     llm = OllamaLLM(model="mistral")
     prompt = f"""
-    A user asked: "{state["question"]}"
+    A user asked: "{scrubbed_question}"
     The local database returned this context: "{state["context"][:500]}"
     
     Does the context seem relevant and sufficient to answer the question?
@@ -106,7 +113,7 @@ def decide_needs_fresh_data(state: AgentState) -> AgentState:
     result = llm.invoke(prompt).strip().upper()
     needs_fresh = "NO" in result
     print(f"  [Agent] Context sufficient: {'No' if needs_fresh else 'Yes'}")
-    return {**state, "needs_fresh_data": needs_fresh}
+    return {**state, "question": scrubbed_question, "needs_fresh_data": needs_fresh}
 
 # ---- Routing ----
 def route(state: AgentState) -> str:
