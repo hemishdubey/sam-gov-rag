@@ -1,6 +1,6 @@
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -17,16 +17,22 @@ def fetch_sam_opportunities():
     offset = 0
     limit = 1000
 
+    today = datetime.today()
+    one_year_ago = today - timedelta(days=364)
+
+    print(f"  Date range: {one_year_ago.strftime('%m/%d/%Y')} to {today.strftime('%m/%d/%Y')}")
+
     while True:
         params = {
             "api_key": API_KEY,
             "limit": limit,
             "offset": offset,
-            "postedFrom": "01/01/2000",
-            "postedTo": datetime.today().strftime("%m/%d/%Y"),
+            "postedFrom": one_year_ago.strftime("%m/%d/%Y"),
+            "postedTo": today.strftime("%m/%d/%Y"),
         }
 
         response = requests.get(url, params=params)
+        print(f"  API response: {response.text[:300]}")
 
         if response.status_code == 429:
             print("API rate limited — try again tomorrow")

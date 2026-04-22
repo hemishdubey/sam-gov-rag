@@ -22,13 +22,16 @@ def fetch_sam_opportunities():
     limit = 1000
     total_fetched = 0
 
+    today = datetime.today()
+    one_year_ago = today - timedelta(days=364)
+
     while True:
         params = {
             "api_key": API_KEY,
             "limit": limit,
             "offset": offset,
-            "postedFrom": "01/01/2000",
-            "postedTo": datetime.today().strftime("%m/%d/%Y"),
+            "postedFrom": one_year_ago.strftime("%m/%d/%Y"),
+            "postedTo": today.strftime("%m/%d/%Y"),
         }
 
         response = requests.get(url, params=params)
